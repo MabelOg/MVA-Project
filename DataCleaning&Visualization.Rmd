@@ -1,0 +1,331 @@
+---
+title: "Data Cleaning and Visualization"
+output: html_document
+date: "2023-11-22"
+---
+
+```{r}
+statistics <- read.csv("C:/Users/leela/OneDrive/Documents/MVA/Project/Full_Dataset.csv")
+head(statistics)
+```
+
+
+
+```{r}
+# Install and load the countrycode package
+if (!requireNamespace("countrycode", quietly = TRUE)) {
+  install.packages("countrycode")
+}
+
+# Load the countrycode package
+library(countrycode)
+
+# Assuming your data frame is named 'statistics', and the country column is named 'Country'
+statistics$Continent <- countrycode(sourcevar = statistics$Country,
+                                    origin = "country.name",
+                                    destination = "continent")
+
+
+# Place Continent after Country column
+statistics <- statistics[, c("Country", "Continent", names(statistics)[-c(which(names(statistics) %in% c("Country", "Continent")))])]
+
+# Display the updated data frame
+head(statistics)
+```
+
+```{r}
+#The function grouped all North and South American countries as Americas 
+# Also, the function could not identify the Continent for Micronesia, therefore we manually hard-coded these cases.
+
+# Manually override the continent for specific cases
+statistics$Continent[statistics$Country == "Micronesia"] <- "Oceania"
+statistics$Continent[statistics$Country %in% c("United States", "Canada", "Mexico")] <- "North America"
+statistics$Continent[statistics$Country %in% c("Brazil", "Argentina", "Colombia", "Chile", "Peru", "Ecuador", "Bolivia", "Paraguay", "Trinidad and Tobago", 
+                                               "Uruguay", "Venezuela", "Guyana", "Suriname", "French Guiana")] <- "South America"
+statistics$Continent[statistics$Country %in% c("Guatemala", "Panama", "Costa Rica", "El Salvador", "Honduras", "Nicaragua", "Belize")] <- "Central America"
+statistics$Continent[statistics$Country %in% c("Dominica", "Saint Kitts & Nevis", "St. Vincent & Grenadines", "Trinidad and Tobago", "Haiti", 
+                                               "Bahamas", "Barbados", "Saint Lucia", "Antigua and Barbuda", "Grenada")] <- "Caribbean"
+```
+
+
+```{r}
+#View(statistics)
+```
+
+
+
+```{r}
+str(statistics)
+```
+
+
+
+```{r}
+# Custom function to convert Export and Import values with trillion, billion, million to numeric
+convert_to_numeric <- function(value) {
+  # Extract numeric part
+  numeric_part <- as.integer(gsub("[^0-9.]", "", value))
+
+  # Extract unit part
+  unit_part <- gsub("[0-9.]", "", value)
+
+  # Convert to numeric based on unit
+  if (grepl("trillion", unit_part, ignore.case = TRUE)) {
+    return(numeric_part * 1e12)
+  } else if (grepl("billion", unit_part, ignore.case = TRUE)) {
+    return(numeric_part * 1e9)
+  } else if (grepl("million", unit_part, ignore.case = TRUE)) {
+    return(numeric_part * 1e6)
+  } else {
+    return(numeric_part)
+  }
+}
+
+# Apply custom function to "Exports" and "Imports" columns
+statistics$Exports <- sapply(statistics$Exports, convert_to_numeric)
+statistics$Imports <- sapply(statistics$Imports, convert_to_numeric)
+
+# Display the updated structure
+str(statistics)
+```
+
+
+# Handling Missing Values
+
+```{r}
+
+# Load the necessary package
+library(dplyr)
+
+# Function to replace missing values with the median of the continent
+replace_na_with_median <- function(df, col_name) {
+  df %>%
+    group_by({{ col_name }}) %>%
+    mutate(across(where(is.numeric), ~ ifelse(is.na(.), median(., na.rm = TRUE), .))) %>%
+    ungroup()
+}
+
+# Replace missing values in numeric columns with the median of the continent
+statistics <- replace_na_with_median(statistics, col_name = Continent)
+
+statistics <- as.data.frame(statistics)
+
+# Display the updated data frame
+head(statistics)
+
+# write.csv(statistics, 'data.csv')
+```
+
+
+```{r}
+# Set row names to "Country" column
+row.names(statistics) <- statistics$Country
+
+# Removing categorical columns
+statistics <- statistics[, c(-1, -2, -20, -23, -25)] 
+
+# Display the updated data frame
+head(statistics)
+str(statistics)
+```
+
+```{r}
+# reversing the values of some variables.
+statistics$UnEmpRate = max(statistics$UnEmpRate) - statistics$UnEmpRate
+statistics$IMR = max(statistics$IMR) - statistics$IMR
+statistics$InfRate = max(statistics$InfRate) - statistics$InfRate
+statistics$CO2 = max(statistics$CO2) - statistics$CO2
+statistics$AQI = max(statistics$AQI) - statistics$AQI
+head(statistics)
+str(statistics)
+```
+
+
+```{r}
+#Scale data
+s.statistics = scale(statistics)
+str(s.statistics)
+```
+
+
+```{r}
+corr = cor(s.statistics)
+round(corr, 2)
+```
+
+
+```{r}
+statistics$GDP <- as.double(statistics$GDP)
+statistics$Exports <- as.double(statistics$Exports)
+
+options(scipen=999)
+
+
+statistics$Exports = round(statistics$Exports)
+statistics$Exports_Int = as.integer(round(statistics$Exports), na.rm = TRUE)
+
+statistics <- statistics[,-21] 
+```
+
+# Mahalnobis distance
+
+```{r}
+# detecting outliers by visualization
+# using mahalanobis distance to detect outliers
+# since the data has highly correlated values, we cannot perform mahalanobis
+# so we are removing the variables with high correlation
+mydata <- s.statistics
+mydata_bar <- colMeans(mydata)
+S <- cov(mydata)
+d2 <- mahalanobis(mydata, mydata_bar , S)
+head(d2)
+numVariables <- ncol(mydata)
+position <- (1:nrow(mydata)-1/2) / nrow(mydata)
+quantiles <- qchisq(position,df = numVariables)
+plot(quantiles, sort(d2))
+text(quantiles, sort(d2), labels = row.names(statistics), col ='#00b276')
+abline(a=0 , b=1)
+
+outliers <- which(d2 > qchisq(0.975, ncol(S)))
+outliers_index <- match(outliers,rownames(statistics1) )
+outliers_index
+```
+
+# Visualization 
+## Univariate Boxplot
+```{r}
+# Plotting uni-variate box plot on the Unemployment rate to detect the outlier countries 
+boxplot(statistics$UnEmpRate,col = 'orange')
+```
+
+```{r}
+library(MVA)
+data = statistics[,c('AQI','WQI')]
+bvbox(data, xlab = 'Air Quality Index', ylab = 'Water Quality Index',col='white',cex=0.5)
+text(data$AQI, data$WQI, labels = rownames(data), pos = 3, cex = 0.7, col = 'darkgreen')
+```
+Here we can see the outlier is 'Kuwait'
+
+
+# Bubble Plot 
+```{r}
+#plot(statistics$AQI, statistics$WQI, xlab = 'Air Quality Index', ylab = 'Water Quality Index', pch=20)
+symbols(statistics$AQI, statistics$WQI, circles = statistics$CO2, inches = .5, col='blue')
+```
+
+# Scatter Plot
+```{r}
+plot(statistics[,1:9])
+plot(statistics[,10:18])
+```
+
+```{r}
+install.packages('scatterplot3d')
+library("scatterplot3d")
+sp3d <- scatterplot3d(statistics$InfRate, statistics$LitRate, statistics$UnEmpRate,
+angle = 40)
+# Add text labels
+text(sp3d$xyz.convert(statistics$InfRate, statistics$LitRate, statistics$UnEmpRate),
+labels = abbreviate(rownames(statistics)), pos = 4, col = "maroon")
+```
+
+```{r}
+#sc_mydata = scale(mydata)
+#head(sc_mydata)
+
+pca <- princomp(mydata, cor = TRUE) 
+summary(pca,loading = T)
+
+pca_data <- pca$scores[, 1:4]
+summary(pca_data)
+```
+
+library('tidyverse')
+```{r}
+if (!require("tidyverse")) install.packages("tidyverse", dependencies = TRUE)
+if (!require("sf")) install.packages("sf", dependencies = TRUE)
+if (!require("rnaturalearth")) install.packages ("rnaturalearth", dependencies = TRUE) 
+if (!require("countrycode")) install.packages ("countrycode", dependencies = TRUE)
+if (!require("ggrepel")) install.packages("ggrepel", dependencies = TRUE)
+```
+
+```{r}
+library('tidyverse')
+library('sf')
+library('rnaturalearth')
+library('countrycode')
+library('ggrepel')
+```
+```{r}
+install.packages(c("ggspatial", "libwgeom", "rnaturalearthdata"))
+```
+```{r}
+library("ggplot2")
+theme_set(theme_bw())
+library("sf")
+```
+
+```{r}
+library("rnaturalearth")
+library("rnaturalearthdata")
+
+world <- ne_countries(scale = "medium", returnclass = "sf")
+class(world)
+```
+
+```{r}
+ggplot(data = world) +
+    geom_sf() +
+    xlab("Longitude") + ylab("Latitude") +
+    ggtitle("World map", subtitle = paste0("(", length(unique(world$NAME)), " countries)"))
+
+```
+
+
+```{r}
+ggplot(data = world) +
+    geom_sf(aes(fill = pop_est)) +
+    scale_fill_viridis_c(option = "plasma", trans = "sqrt")
+```
+```{r}
+install.packages('rworldmap')
+library(rworldmap)
+world <- getMap()
+```
+
+```{r}
+library(raster)
+library(rgdal)
+library(rgeos)
+library(maps)
+library(maptools)
+```
+```{r}
+world@data <- merge(world@data, statistics, by.x = "ISO3", by.y = "row.names", all.x = TRUE)
+
+z <- world@data$Population
+
+plot(world, col=colorRampPalette(c("#ffffd9", "#fee08b", "#fdae61", "#f46d43", "#d73027"))(100), border="#FFFFFF")
+
+
+```
+
+```{r}
+stat.mat = as.matrix(s.statistics)
+stat.d = dist(s.statistics)
+
+hc <- hclust(stat.d, method = "single")
+plot(hc, main = "Single Linkage HC Dendogram")
+plot(rev(hc$height))
+```
+
+```{r}
+ct = cutree(hc, k=8)
+table(ct)
+```
+
+```{r}
+
+```
+
+

@@ -1,0 +1,428 @@
+---
+title: "Untitled"
+output: html_document
+date: "2023-11-22"
+---
+
+```{r}
+statistics <- read.csv("/Users/mabelogonna/Downloads/Full_Dataset.csv")
+head(statistics)
+```
+
+
+
+```{r}
+# Install and load the countrycode package
+#install.packages("countrycode")
+
+
+# Load the countrycode package
+library(countrycode)
+
+
+statistics$Continent <- countrycode(sourcevar = statistics$Country,
+                                    origin = "country.name",
+                                    destination = "continent")
+
+
+# Place Continent after Country colum
+statistics <- statistics[, c("Country", "Continent", names(statistics)[-c(which(names(statistics) %in% c("Country", "Continent")))])]
+
+# Display the updated data frame
+head(statistics)
+```
+
+
+```{r}
+#The function grouped all North and South American countries as Americas 
+# Also, the function could not identify the Continent for Micronesia, therefore we manually hard-coded these cases.
+
+# Manually override the continent for specific cases
+statistics$Continent[statistics$Country == "Micronesia"] <- "Oceania"
+statistics$Continent[statistics$Country %in% c("United States", "Canada", "Mexico")] <- "North America"
+statistics$Continent[statistics$Country %in% c("Brazil", "Argentina", "Colombia", "Chile", "Peru", "Ecuador", "Bolivia", "Paraguay", "Trinidad                                                 and Tobago", "Uruguay", "Venezuela", "Guyana", "Suriname", "French Guiana")] <- "South America"
+statistics$Continent[statistics$Country %in% c("Guatemala", "Panama", "Costa Rica", "El Salvador", "Honduras", "Nicaragua", "Belize")] <-                                                      "Central America"
+statistics$Continent[statistics$Country %in% c("Dominica", "Saint Kitts & Nevis", "Jamaica", "St. Vincent & Grenadines", "Trinidad and Tobago", 
+                                               "Haiti", "Bahamas","Dominican Republic", "Barbados", "Saint Lucia", "Antigua and Barbuda",                                                      "Grenada")] <- "Caribbean"
+```
+
+
+```{r}
+#View(statistics)
+```
+
+
+
+```{r}
+str(statistics)
+```
+
+
+
+```{r}
+# Custom function to convert Export and Import values with trillion, billion, million to numeric
+convert_to_numeric <- function(value) {
+  # Extract numeric part
+  numeric_part <- as.numeric(gsub("[^0-9.]", "", value))
+
+  # Extract unit part
+  unit_part <- gsub("[0-9.]", "", value)
+
+  # Convert to numeric based on unit
+  if (grepl("trillion", unit_part, ignore.case = TRUE)) {
+    return(numeric_part * 1e12)
+  } else if (grepl("billion", unit_part, ignore.case = TRUE)) {
+    return(numeric_part * 1e9)
+  } else if (grepl("million", unit_part, ignore.case = TRUE)) {
+    return(numeric_part * 1e6)
+  } else {
+    return(numeric_part)
+  }
+}
+
+# Apply custom function to "Exports" and "Imports" columns
+statistics$Exports <- sapply(statistics$Exports, convert_to_numeric)
+statistics$Imports <- sapply(statistics$Imports, convert_to_numeric)
+
+# Display the updated structure
+#str(statistics)
+```
+
+
+
+# Handling Missing Values
+
+```{r}
+
+# Load the necessary package
+library(dplyr)
+
+# Function to replace missing values with the median of the continent
+replace_na_with_median <- function(df, col_name) {
+  df %>%
+    group_by({{ col_name }}) %>%
+    mutate(across(where(is.numeric), ~ ifelse(is.na(.), median(., na.rm = TRUE), .))) %>%
+    ungroup()
+}
+
+# Replace missing values in numeric columns with the median of the continent
+statistics <- replace_na_with_median(statistics, col_name = Continent)
+
+statistics <- as.data.frame(statistics)
+
+# Display the updated data frame
+#head(statistics)
+```
+
+
+
+```{r}
+# Set row names to "Country" column
+row.names(statistics) <- statistics$Country
+
+# Removing categorical columns
+stat <- statistics[, c(-1, -2, -20, -23, -25)] 
+
+# Display the updated data frame
+#head(stat)
+```
+
+```{r}
+# reversing the values of some variables.
+stat$UnEmpRate = max(stat$UnEmpRate) - stat$UnEmpRate
+stat$IMR = max(stat$IMR) - stat$IMR
+stat$InfRate = max(stat$InfRate) - stat$InfRate
+stat$CO2 = max(stat$CO2) - stat$CO2
+stat$AQI = max(stat$AQI) - stat$AQI
+#head(stat)
+```
+
+
+```{r}
+#Scale data
+s.stat = scale(stat)
+```
+
+
+```{r}
+corr = cor(s.stat)
+#round(corr, 2)
+```
+
+
+## Dimensional Reduction
+
+# PCA
+```{r}
+# Perform PCA
+options(digits = 2)
+pca_result <- princomp(s.stat)
+summary(pca_result, loadings =T)
+```
+
+#Show individual Loadings
+```{r}
+a1<-pca_result$loadings[,1] 
+a1
+```
+
+```{r}
+a2<-pca_result$loadings[,2] 
+```
+
+```{r}
+a3<-pca_result$loadings[,3] 
+```
+
+
+```{r}
+a4<-pca_result$loadings[,4] 
+```
+
+
+```{r}
+a5<-pca_result$loadings[,5] 
+```
+```{r}
+#Show loadings of Comp1 to Comp5
+round(pca_result$loadings[,1:5], 2)
+```
+
+
+```{r}
+# Select what countries are in which PCA
+
+# PC1
+pc1 <- tail(sort(pca_result$scores[, 1]), 15) %>% as.data.frame()
+pc1$country <- rownames(pc1)
+pc1 <- as.vector(unlist(pc1[, 2]))
+
+# PC2
+pc2 <- tail(sort(pca_result$scores[, 2]), 15) %>% as.data.frame()
+pc2$country <- rownames(pc2)
+pc2 <- as.vector(unlist(pc2[, 2]))
+
+# PC3
+pc3 <- tail(sort(pca_result$scores[, 3]), 15) %>% as.data.frame()
+pc3$country <- rownames(pc3)
+pc3 <- as.vector(unlist(pc3[, 2]))
+
+# PC4
+pc4 <- tail(sort(pca_result$scores[, 4]), 15) %>% as.data.frame()
+pc4$country <- rownames(pc4)
+pc4 <- as.vector(unlist(pc4[, 2]))
+
+# PC5
+pc5 <- tail(sort(pca_result$scores[, 5]), 15) %>% as.data.frame()
+pc5$country <- rownames(pc5)
+pc5 <- as.vector(unlist(pc5[, 2]))
+```
+
+
+
+```{r}
+# Create a biplot for PC1 and PC2
+biplot(pca_result, choices = c(1, 2), cex=0.4, scale = 0)
+
+# Create a biplot for PC1 and PC3
+biplot(pca_result, choices = c(1, 3), cex=0.4,scale = 0)
+
+# Create a biplot for PC2 and PC3
+biplot(pca_result, choices = c(2, 3), cex=0.4, scale = 0)
+
+
+# Create a biplot for PC2 and PC3
+biplot(pca_result, choices = c(3, 4), cex=0.4, scale = 0)
+
+
+# Create a biplot for PC2 and PC3
+biplot(pca_result, choices = c(4, 5), cex=0.5, scale = 0)
+```
+
+
+
+
+
+```{r}
+# Plot All 5 PC Combinations
+# Set the size of the plots and text
+par(mfrow = c(2, 2), cex = 0.3)
+
+# Create biplots for specified combinations of PCs
+combinations <- expand.grid(1:5, 1:5)
+combinations <- combinations[combinations$Var1 < combinations$Var2, ]
+
+#for (i in 1:nrow(combinations)) {
+#  pc1 <- combinations$Var1[i]
+#  pc2 <- combinations$Var2[i]
+#  plot_title <- paste("PC", pc1, "vs PC", pc2)
+#  biplot(pca_result, choices = c(pc1, pc2), scale = 0, cex = 1.5, main = plot_title)
+#}
+```
+
+
+```{r}
+# install.packages("scatterplot3d") 
+library(scatterplot3d)
+
+
+# Define continent color palette
+continent_colors <- c(
+  "North America" = "red",
+  "Asia" = "blue",
+  "Europe" = "green",
+  "South America" = "purple",
+  "Oceania" = "pink",
+  "Africa" = "black",
+  "Caribbean" = "orange",
+  "Central America" = "turquoise"
+  
+)
+
+# Assign colors based on continent variable
+colors <- continent_colors[as.character(statistics$Continent)]
+
+# Create 3D scatterplot with color-coded continents
+scatterplot3d(pca_result$scores[, c(1, 2, 3)], main = "3D PCA plot - By Continent", color = colors)
+
+# Add legend for continent colors
+legend("topright", legend = unique(statistics$Continent), fill = continent_colors, title = "Continent")
+```
+
+
+```{r}
+# Install and load necessary libraries
+#install.packages(c("sf", "ggplot2", "rnaturalearth"))
+library(sf)
+library(ggplot2)
+library(rnaturalearth)
+
+# Load world map data from 'rnaturalearth' package
+world <- ne_countries(scale = "medium", returnclass = "sf")
+
+
+# Create a data frame with country names, principal component scores, and continent information
+map_data <- data.frame(
+  Country = rownames(pca_result$scores),
+  PC1 = pca_result$scores[, 1],
+  PC2 = pca_result$scores[, 2],
+  PC3 = pca_result$scores[, 3],
+  Continent = statistics$Continent
+)
+
+# Merge map data with principal component scores
+map_data_sf <- merge(world, map_data, by.x = "name", by.y = "Country")
+
+# Create a map plot for PC1 and PC2
+ggplot() +
+  geom_sf(data = map_data_sf, aes(fill = PC1), color = "white") +
+  scale_fill_gradient(low = "red", high = "green", name = "PC1") +
+  theme_minimal() +
+  labs(title = "Principal Component 1 (PC1) Map")
+
+# Create a map plot for PC2 and PC3
+ggplot() +
+  geom_sf(data = map_data_sf, aes(fill = PC2), color = "white") +
+  scale_fill_gradient(low = "red", high = "green", name = "PC2") +
+  theme_minimal() +
+  labs(title = "Principal Component 2 (PC2) Map")
+
+# Create a map plot for PC3 and another principal component if needed
+ggplot() +
+  geom_sf(data = map_data_sf, aes(fill = PC3), color = "white") +
+  scale_fill_gradient(low = "red", high = "green", name = "PC3") +
+  theme_minimal() +
+  labs(title = "Principal Component 3 (PC3) Map")
+```
+
+
+# Multi-dimensional Scaling
+
+```{r}
+d <- dist(scale(s.stat))
+
+#library(MVA) 
+mds <- cmdscale(d) 
+#head(mds)
+#Reporting more than 2 coordinates
+mds5<-cmdscale(d, k=5) 
+head(mds5)
+```
+Two countries have similar values or closer in Dimension 1,  such as US and China suggests that they are similar according to the dissimilarity matrix used in the MDS analysis. Conversely, if the values differ substantially, it indicates dissimilarity.For example, we see US and India are least similar in the countires shown.
+
+
+#Plot MDS
+
+```{r}
+plot(mds,pch=".",col="white",main="Classical MDS") 
+text(mds, row.names(s.stat),col="red",cex=0.5)
+```
+
+
+
+```{r}
+# Apply MDS to the scaled data
+mds <- cmdscale(d, eig = TRUE)
+
+# Print the eigenvalues
+round(mds$eig, 2)
+```
+
+```{r}
+#Elbow Plot
+plot(mds$eig,type="b", main= " MDS Elbow Plot")
+```
+
+```{r}
+options(digits=3) 
+mds8<-cmdscale(d, k=5,eig=T) 
+cumsum(mds8$eig[1:5])/sum(mds8$eig[1:5])
+```
+
+
+
+```{r}
+#2drepresentation 
+mds<-cmdscale(d) 
+head(mds)
+```
+
+
+```{r}
+mds.d<-dist(mds) 
+mds.d.mat<-as.matrix(mds.d) 
+mds.d.mat[1:5,1:5]
+```
+
+```{r}
+#compare this with original dist matrix 
+data.d<-dist(scale(stat))
+data.d.mat<-as.matrix(data.d) 
+data.d.mat[1:5,1:5]
+```
+
+```{r}
+corr = cor(s.stat)
+#round(corr, 2)
+```
+
+
+
+```{r}
+#So corr-distance matrix can be: 
+corr.d <- 1 - cor(s.stat) 
+mds.s.stat.variables <- cmdscale(corr.d, eig = T) 
+round(mds.s.stat.variables$eig, 2)
+```
+
+
+
+```{r}
+#Plot MDS Variable Plot
+plot(mds.s.stat.variables$points,col ="white",main=" MDS Variable Plot") 
+text(mds.s.stat.variables$points, names(stat), cex=0.5,col="blue")
+```
+
+
+
+

@@ -1,0 +1,718 @@
+---
+title: "Untitled"
+output:
+  word_document: default
+  html_document: default
+---
+
+
+```{r}
+statistics <- read.csv("/Users/caseysun/Downloads/Full_Dataset.csv")
+head(statistics)
+```
+
+
+
+```{r}
+# Install and load the countrycode package
+if (!requireNamespace("countrycode", quietly = TRUE)) {
+  install.packages("countrycode")
+}
+
+# Load the countrycode package
+library(countrycode)
+
+# Assuming your data frame is named 'statistics', and the country column is named 'Country'
+statistics$Continent <- countrycode(sourcevar = statistics$Country,
+                                    origin = "country.name",
+                                    destination = "continent")
+
+
+# Place Continent after Country colum
+statistics <- statistics[, c("Country", "Continent", names(statistics)[-c(which(names(statistics) %in% c("Country", "Continent")))])]
+
+# Display the updated data frame
+head(statistics)
+```
+
+```{r}
+#The function grouped all North and South American countries as Americas 
+# Also, the function could not identify the Continent for Micronesia, therefore we manually hard-coded these cases.
+
+# Manually override the continent for specific cases
+statistics$Continent[statistics$Country == "Micronesia"] <- "Oceania"
+statistics$Continent[statistics$Country %in% c("United States", "Canada", "Mexico")] <- "North America"
+statistics$Continent[statistics$Country %in% c("Brazil", "Argentina", "Colombia", "Chile", "Peru", "Ecuador", "Bolivia", "Paraguay", "Trinidad                                                 and Tobago", "Uruguay", "Venezuela", "Guyana", "Suriname", "French Guiana")] <- "South America"
+statistics$Continent[statistics$Country %in% c("Guatemala", "Panama", "Costa Rica", "El Salvador", "Honduras", "Nicaragua", "Belize")] <-                                                      "Central America"
+statistics$Continent[statistics$Country %in% c("Dominica", "Saint Kitts & Nevis", "Jamaica", "St. Vincent & Grenadines", "Trinidad and Tobago", 
+                                               "Haiti", "Bahamas","Dominican Republic", "Barbados", "Saint Lucia", "Antigua and Barbuda",                                                      "Grenada")] <- "Caribbean"
+```
+
+
+```{r}
+#View(statistics)
+```
+
+
+
+```{r}
+str(statistics)
+```
+
+
+
+```{r}
+# Custom function to convert Export and Import values with trillion, billion, million to numeric
+convert_to_numeric <- function(value) {
+  # Extract numeric part
+  numeric_part <- as.numeric(gsub("[^0-9.]", "", value))
+
+  # Extract unit part
+  unit_part <- gsub("[0-9.]", "", value)
+
+  # Convert to numeric based on unit
+  if (grepl("trillion", unit_part, ignore.case = TRUE)) {
+    return(numeric_part * 1e12)
+  } else if (grepl("billion", unit_part, ignore.case = TRUE)) {
+    return(numeric_part * 1e9)
+  } else if (grepl("million", unit_part, ignore.case = TRUE)) {
+    return(numeric_part * 1e6)
+  } else {
+    return(numeric_part)
+  }
+}
+
+# Apply custom function to "Exports" and "Imports" columns
+statistics$Exports <- sapply(statistics$Exports, convert_to_numeric)
+statistics$Imports <- sapply(statistics$Imports, convert_to_numeric)
+
+# Display the updated structure
+str(statistics)
+```
+
+
+
+# Handling Missing Values
+
+```{r}
+
+# Load the necessary package
+library(dplyr)
+
+# Function to replace missing values with the median of the continent
+replace_na_with_median <- function(df, col_name) {
+  df %>%
+    group_by({{ col_name }}) %>%
+    mutate(across(where(is.numeric), ~ ifelse(is.na(.), median(., na.rm = TRUE), .))) %>%
+    ungroup()
+}
+
+# Replace missing values in numeric columns with the median of the continent
+statistics <- replace_na_with_median(statistics, col_name = Continent)
+
+statistics <- as.data.frame(statistics)
+
+# Display the updated data frame
+head(statistics)
+
+```
+```{r}
+tail(statistics)
+```
+
+```{r}
+# Set row names to "Country" column
+row.names(statistics) <- statistics$Country
+
+# Keep a copy of the dataset
+mydata <- statistics
+
+# Removing categorical columns
+statistics <- statistics[, c(-1, -2, -20, -23, -25)] 
+
+# Display the updated data frame
+head(statistics)
+```
+
+```{r}
+# reversing the values of some variables.
+statistics$UnEmpRate = max(statistics$UnEmpRate) - statistics$UnEmpRate
+statistics$IMR = max(statistics$IMR) - statistics$IMR
+statistics$InfRate = max(statistics$InfRate) - statistics$InfRate
+statistics$CO2 = max(statistics$CO2) - statistics$CO2
+statistics$AQI = max(statistics$AQI) - statistics$AQI
+head(statistics)
+```
+
+
+
+```{r}
+#Scale data
+s.statistics = scale(statistics)
+```
+
+
+```{r}
+corr = cor(s.statistics)
+round(corr, 2)
+```
+```{r}
+unique_values <- unique(mydata$Continent)
+unique_values
+number_of_unique_values <- length(unique(mydata$Continent))
+number_of_unique_values
+```
+
+```{r}
+options(digits = 3)
+```
+
+## hierarchical clustering - single
+
+```{r}
+## hierarchical clustering - single
+dist <- dist(s.statistics)
+hc.single <- hclust(dist, 'single')
+# cluster dendrogram
+plot(hc.single, cex = 0.3, main = 'Cluster Dendrogram of HC.single')
+```
+```{r}
+# find the number of clusters
+plot(rev(hc.single$height), main = 'scree plot of HC.single')
+```
+
+Based on the scree plot, set h = 5  as the cut point.
+```{r}
+ct <- cutree(hc.single, h = 5)
+table(ct)
+```
+This clustering outcome is not good.
+
+```{r}
+# cluster mean-HC.single
+cluster1 = subset(rownames(s.statistics), ct == 1)
+index1 = match(cluster1, rownames(s.statistics))
+clust1mean = colMeans(s.statistics[index1, , drop = FALSE])
+
+cluster2 = subset(rownames(s.statistics), ct == 2)
+index2 = match(cluster2, rownames(s.statistics))
+clust2mean = colMeans(s.statistics[index2, , drop = FALSE])
+
+cluster3 = subset(rownames(s.statistics), ct == 3)
+index3 = match(cluster3, rownames(s.statistics))
+clust3mean = colMeans(s.statistics[index3, ])
+
+cluster4 = subset(rownames(s.statistics), ct == 4)
+index4 = match(cluster4, rownames(s.statistics))
+clust4mean = colMeans(s.statistics[index4, , drop = FALSE])
+
+cluster5 = subset(rownames(s.statistics), ct == 5)
+index5 = match(cluster5, rownames(s.statistics))
+clust5mean = colMeans(s.statistics[index5, ])
+
+cluster6 = subset(rownames(s.statistics), ct == 6)
+index6 = match(cluster6, rownames(s.statistics))
+clust6mean = colMeans(s.statistics[index6, ])
+
+cluster7 = subset(rownames(s.statistics), ct == 7)
+index7 = match(cluster7, rownames(s.statistics))
+clust7mean = colMeans(s.statistics[index7, , drop = FALSE])
+
+cluster8 = subset(rownames(s.statistics), ct == 8)
+index8 = match(cluster8, rownames(s.statistics))
+clust8mean = colMeans(s.statistics[index8, , drop = FALSE])
+
+clustMeans <- rbind(clust1mean, clust2mean, clust3mean, clust4mean, clust5mean, clust6mean, clust7mean, clust8mean)
+library(knitr)
+kable(clustMeans, caption = "Column Means for Each Cluster-HC.single")
+```
+
+
+```{r}
+# Interpreting HC.single based on PCA
+pca <- princomp(s.statistics)
+pca$loadings[,1:2]
+
+plot(pca$scores[, 1:2], col = 'white', main='PCA Biplot - HC.single')
+text(pca$scores[, 1:2], labels=abbreviate(row.names(s.statistics)), col=ct, cex=0.5)
+```
+The plot is hard to interpret, hierarchical clustering single method is not working well.
+
+
+
+```{r}
+#install.packages('maps')
+library(ggplot2)
+library(maps)
+world_map <- map_data("world")
+country_clusters <- data.frame(country = names(ct), cluster = ct)
+# match the country name
+world_countries <- unique(world_map$region)
+your_countries <- unique(country_clusters$country)
+
+# Countries in your data not in the world map
+not_in_world_map <- your_countries[!your_countries %in% world_countries]
+
+```
+```{r}
+print(not_in_world_map)
+```
+```{r}
+# make a map
+country_clusters$country <- gsub("United States", "USA", country_clusters$country)
+country_clusters$country <- gsub("United Kingdom", "UK", country_clusters$country)
+country_clusters$country <- gsub("Czech Republic (Czechia)", "Czech Republic", country_clusters$country)
+country_clusters$country <- gsub("Côte d'Ivoire", "Ivory Coast", country_clusters$country)
+country_clusters$country <- gsub("DR Congo", "Democratic Republic of the Congo", country_clusters$country)
+country_clusters$country <- gsub("Trinidad and Tobago", "Trinidad", country_clusters$country)
+country_clusters$country <- gsub("Trinidad and Tobago", "Tobago", country_clusters$country)
+country_clusters$country <- gsub("State of Palestine", "Palestine", country_clusters$country)
+country_clusters$country <- gsub("Congo", "Republic of Congo", country_clusters$country)
+country_clusters$country <- gsub("Eswatini", "Swaziland", country_clusters$country)
+country_clusters$country <- gsub("Cabo Verde", "Cape Verde", country_clusters$country)
+country_clusters$country <- gsub("Antigua and Barbuda", "Antigua", country_clusters$country)
+country_clusters$country <- gsub("Antigua and Barbuda", "Barbuda", country_clusters$country)
+country_clusters$country <- gsub("Saint Kitts & Nevis", "Saint Kitts", country_clusters$country)
+country_clusters$country <- gsub("Saint Kitts & Nevis", "Nevis", country_clusters$country)
+country_clusters$country <- gsub("St. Vincent & Grenadines", "Saint Vincent", country_clusters$country)
+country_clusters$country <- gsub("Sao Tome & Principe", "Sao Tome and Principe", country_clusters$country)
+
+
+world_map <- map_data("world")
+
+world_map_clusters <- merge(world_map, country_clusters, by.x = "region", by.y = "country", all.x = TRUE)
+
+ggplot(data = world_map_clusters) +
+  geom_polygon(aes(x = long, y = lat, group = group, fill = factor(cluster))) +
+  expand_limits(x = world_map$long, y = world_map$lat) +
+  theme_minimal() +
+  labs(fill = "Cluster")
+```
+
+## hierarchical clustering - complete
+
+```{r}
+## hierarchical clustering - complete
+hc.complete <- hclust(dist, 'complete')
+# cluster dendrogram
+plot(hc.complete, cex = 0.3, main = 'Cluster Dendrogram of HC.complete')
+```
+```{r}
+# find the number of clusters
+plot(rev(hc.complete$height), main='scree plot of HC.complete')
+
+```
+Based on the scree plot, set h = 8  as the cut point.
+```{r}
+ct2 <- cutree(hc.complete, h = 8)
+table(ct2)
+```
+```{r}
+# cluster mean-HC.complete
+cluster1 = subset(rownames(s.statistics), ct2 == 1)
+index1 = match(cluster1, rownames(s.statistics))
+clust1mean = colMeans(s.statistics[index1, , drop = FALSE])
+
+cluster2 = subset(rownames(s.statistics), ct2 == 2)
+index2 = match(cluster2, rownames(s.statistics))
+clust2mean = colMeans(s.statistics[index2, , drop = FALSE])
+
+cluster3 = subset(rownames(s.statistics), ct2 == 3)
+index3 = match(cluster3, rownames(s.statistics))
+clust3mean = colMeans(s.statistics[index3, ])
+
+cluster4 = subset(rownames(s.statistics), ct2 == 4)
+index4 = match(cluster4, rownames(s.statistics))
+clust4mean = colMeans(s.statistics[index4, , drop = FALSE])
+
+cluster5 = subset(rownames(s.statistics), ct2 == 5)
+index5 = match(cluster5, rownames(s.statistics))
+clust5mean = colMeans(s.statistics[index5, ])
+
+cluster6 = subset(rownames(s.statistics), ct2 == 6)
+index6 = match(cluster6, rownames(s.statistics))
+clust6mean = colMeans(s.statistics[index6, ])
+
+cluster7 = subset(rownames(s.statistics), ct2 == 7)
+index7 = match(cluster7, rownames(s.statistics))
+clust7mean = colMeans(s.statistics[index7, , drop = FALSE])
+
+cluster8 = subset(rownames(s.statistics), ct2 == 8)
+index8 = match(cluster8, rownames(s.statistics))
+clust8mean = colMeans(s.statistics[index8, , drop = FALSE])
+
+cluster9 = subset(rownames(s.statistics), ct2 == 9)
+index9 = match(cluster9, rownames(s.statistics))
+clust9mean = colMeans(s.statistics[index9, , drop = FALSE])
+
+cluster10 = subset(rownames(s.statistics), ct2 == 10)
+index10 = match(cluster10, rownames(s.statistics))
+clust10mean = colMeans(s.statistics[index10, , drop = FALSE])
+
+cluster11 = subset(rownames(s.statistics), ct2 == 11)
+index11 = match(cluster11, rownames(s.statistics))
+clust11mean = colMeans(s.statistics[index11, , drop = FALSE])
+
+cluster12 = subset(rownames(s.statistics), ct2 == 12)
+index12 = match(cluster12, rownames(s.statistics))
+clust12mean = colMeans(s.statistics[index12, , drop = FALSE])
+
+clustMeans <- rbind(clust1mean, clust2mean, clust3mean, clust4mean, clust5mean, clust6mean, clust7mean, clust8mean, clust9mean, clust10mean, clust11mean, clust12mean)
+clustMeans
+library(knitr)
+kable(clustMeans, caption = "Column Means for Each Cluster-HC.complete")
+```
+
+```{r}
+# Interpreting HC.complete based on PCA
+plot(pca$scores[, 1:2], col = 'white', main='PCA Biplot - HC.complete')
+text(pca$scores[, 1:2], labels=row.names(s.statistics), col=ct2, cex=0.5)
+```
+This plot still looks confusing.
+
+
+```{r}
+# make a map
+country_clusters <- data.frame(country = names(ct), cluster = ct2)
+country_clusters$country <- gsub("United States", "USA", country_clusters$country)
+country_clusters$country <- gsub("United Kingdom", "UK", country_clusters$country)
+country_clusters$country <- gsub("Czech Republic (Czechia)", "Czech Republic", country_clusters$country)
+country_clusters$country <- gsub("Côte d'Ivoire", "Ivory Coast", country_clusters$country)
+country_clusters$country <- gsub("DR Congo", "Democratic Republic of the Congo", country_clusters$country)
+country_clusters$country <- gsub("Trinidad and Tobago", "Trinidad", country_clusters$country)
+country_clusters$country <- gsub("Trinidad and Tobago", "Tobago", country_clusters$country)
+country_clusters$country <- gsub("State of Palestine", "Palestine", country_clusters$country)
+country_clusters$country <- gsub("Congo", "Republic of Congo", country_clusters$country)
+country_clusters$country <- gsub("Eswatini", "Swaziland", country_clusters$country)
+country_clusters$country <- gsub("Cabo Verde", "Cape Verde", country_clusters$country)
+country_clusters$country <- gsub("Antigua and Barbuda", "Antigua", country_clusters$country)
+country_clusters$country <- gsub("Antigua and Barbuda", "Barbuda", country_clusters$country)
+country_clusters$country <- gsub("Saint Kitts & Nevis", "Saint Kitts", country_clusters$country)
+country_clusters$country <- gsub("Saint Kitts & Nevis", "Nevis", country_clusters$country)
+country_clusters$country <- gsub("St. Vincent & Grenadines", "Saint Vincent", country_clusters$country)
+country_clusters$country <- gsub("Sao Tome & Principe", "Sao Tome and Principe", country_clusters$country)
+
+world_map <- map_data("world")
+
+world_map_clusters <- merge(world_map, country_clusters, by.x = "region", by.y = "country", all.x = TRUE)
+
+ggplot(data = world_map_clusters) +
+  geom_polygon(aes(x = long, y = lat, group = group, fill = factor(cluster))) +
+  expand_limits(x = world_map$long, y = world_map$lat) +
+  theme_minimal() +
+  labs(fill = "Cluster")
+```
+
+## hierarchical clustering - average
+
+```{r}
+## hierarchical clustering - average
+hc.average <- hclust(dist, 'average')
+# cluster dendrogram
+plot(hc.average, cex = 0.3, main = 'Cluster Dendrogram of HC.average')
+```
+```{r}
+# find the number of cluster
+plot(rev(hc.average$height), main='scree plot of HC.average')
+
+```
+Based on the scree plot, choose h = 6 as cut point.
+```{r}
+ct3 <- cutree(hc.average, h = 6)
+table(ct3)
+```
+```{r}
+# cluster mean-HC.average
+cluster1 = subset(rownames(s.statistics), ct3 == 1)
+index1 = match(cluster1, rownames(s.statistics))
+clust1mean = colMeans(s.statistics[index1, , drop = FALSE])
+
+cluster2 = subset(rownames(s.statistics), ct3 == 2)
+index2 = match(cluster2, rownames(s.statistics))
+clust2mean = colMeans(s.statistics[index2, , drop = FALSE])
+
+cluster3 = subset(rownames(s.statistics), ct3 == 3)
+index3 = match(cluster3, rownames(s.statistics))
+clust3mean = colMeans(s.statistics[index3, ])
+
+cluster4 = subset(rownames(s.statistics), ct3 == 4)
+index4 = match(cluster4, rownames(s.statistics))
+clust4mean = colMeans(s.statistics[index4, , drop = FALSE])
+
+cluster5 = subset(rownames(s.statistics), ct3 == 5)
+index5 = match(cluster5, rownames(s.statistics))
+clust5mean = colMeans(s.statistics[index5, , drop = FALSE])
+
+cluster6 = subset(rownames(s.statistics), ct3 == 6)
+index6 = match(cluster6, rownames(s.statistics))
+clust6mean = colMeans(s.statistics[index6, ])
+
+cluster7 = subset(rownames(s.statistics), ct3 == 7)
+index7 = match(cluster7, rownames(s.statistics))
+clust7mean = colMeans(s.statistics[index7, , drop = FALSE])
+
+cluster8 = subset(rownames(s.statistics), ct3 == 8)
+index8 = match(cluster8, rownames(s.statistics))
+clust8mean = colMeans(s.statistics[index8, , drop = FALSE])
+
+cluster9 = subset(rownames(s.statistics), ct3 == 9)
+index9 = match(cluster9, rownames(s.statistics))
+clust9mean = colMeans(s.statistics[index9, , drop = FALSE])
+
+cluster10 = subset(rownames(s.statistics), ct3 == 10)
+index10 = match(cluster10, rownames(s.statistics))
+clust10mean = colMeans(s.statistics[index10, , drop = FALSE])
+
+clustMeans <- rbind(clust1mean, clust2mean, clust3mean, clust4mean, clust5mean, clust6mean, clust7mean, clust8mean, clust9mean, clust10mean)
+
+library(knitr)
+kable(clustMeans, caption = "Column Means for Each Cluster-HC.average")
+```
+```{r}
+# Interpreting HC.average based on PCA
+plot(pca$scores[, 1:2], col = 'white', main='PCA Biplot - HC.average')
+text(pca$scores[, 1:2], labels=row.names(s.statistics), col=ct3, cex=0.5)
+```
+
+```{r}
+# make a map
+country_clusters <- data.frame(country = names(ct), cluster = ct3)
+country_clusters$country <- gsub("United States", "USA", country_clusters$country)
+country_clusters$country <- gsub("United Kingdom", "UK", country_clusters$country)
+country_clusters$country <- gsub("Czech Republic (Czechia)", "Czech Republic", country_clusters$country)
+country_clusters$country <- gsub("Côte d'Ivoire", "Ivory Coast", country_clusters$country)
+country_clusters$country <- gsub("DR Congo", "Democratic Republic of the Congo", country_clusters$country)
+country_clusters$country <- gsub("Trinidad and Tobago", "Trinidad", country_clusters$country)
+country_clusters$country <- gsub("Trinidad and Tobago", "Tobago", country_clusters$country)
+country_clusters$country <- gsub("State of Palestine", "Palestine", country_clusters$country)
+country_clusters$country <- gsub("Congo", "Republic of Congo", country_clusters$country)
+country_clusters$country <- gsub("Eswatini", "Swaziland", country_clusters$country)
+country_clusters$country <- gsub("Cabo Verde", "Cape Verde", country_clusters$country)
+country_clusters$country <- gsub("Antigua and Barbuda", "Antigua", country_clusters$country)
+country_clusters$country <- gsub("Antigua and Barbuda", "Barbuda", country_clusters$country)
+country_clusters$country <- gsub("Saint Kitts & Nevis", "Saint Kitts", country_clusters$country)
+country_clusters$country <- gsub("Saint Kitts & Nevis", "Nevis", country_clusters$country)
+country_clusters$country <- gsub("St. Vincent & Grenadines", "Saint Vincent", country_clusters$country)
+country_clusters$country <- gsub("Sao Tome & Principe", "Sao Tome and Principe", country_clusters$country)
+
+world_map <- map_data("world")
+
+world_map_clusters <- merge(world_map, country_clusters, by.x = "region", by.y = "country", all.x = TRUE)
+
+ggplot(data = world_map_clusters) +
+  geom_polygon(aes(x = long, y = lat, group = group, fill = factor(cluster))) +
+  expand_limits(x = world_map$long, y = world_map$lat) +
+  theme_minimal() +
+  labs(fill = "Cluster")
+```
+
+## kmeans clustering
+
+```{r}
+## kmeans clustering
+# find the number of cluster
+plot.wgss = function(mydata, maxc = nrow(mydata)-1) {
+  wgss = numeric(maxc)
+  for (i in 1:maxc){
+    km <- kmeans(mydata, centers=i, nstart = 10)
+    wgss[i] = km$tot.withinss
+  }
+  plot(1:maxc, wgss, type="b", xlab="Number of Clusters",
+  ylab="Within groups sum of squares", main="Scree Plot") 
+}
+
+plot.wgss(s.statistics, 20)
+```
+Based on the scree plot, k = 3.
+```{r}
+km <- kmeans(s.statistics, centers = 3,, nstart = 10)
+table(km$cluster)
+```
+```{r}
+# cluster mean-kmeans
+options(digits = 3)
+clusterMeans <- km$centers
+rownames(clusterMeans) <- c("Cluster 1", "Cluster 2", "Cluster 3")
+
+library(knitr)
+kable(clusterMeans, caption = "Column Means for each Cluster - kmeans")
+```
+```{r}
+pca$loadings[,1:2]
+```
+
+```{r}
+# Interpreting kmeans based on PCA 
+plot(pca$scores[, 1:2], col = 'white', main='PCA Biplot - kmeans')
+text(pca$scores[, 1:2], labels=row.names(s.statistics), col=km$cluster, cex=0.4)
+```
+
+```{r}
+statistics_1 <- as.data.frame(s.statistics)
+statistics_1$Cluster <- km$cluster
+cluster1_data <- statistics_1[statistics_1$Cluster == 1, ]
+cluster1_data
+cluster2_data <- statistics_1[statistics_1$Cluster == 2, ]
+cluster2_data
+cluster3_data <- statistics_1[statistics_1$Cluster == 3, ]
+cluster3_data
+```
+
+
+```{r}
+# make a map
+country_clusters <- data.frame(country = names(km$cluster), cluster = km$cluster)
+country_clusters$country <- gsub("United States", "USA", country_clusters$country)
+country_clusters$country <- gsub("United Kingdom", "UK", country_clusters$country)
+#country_clusters$country <- gsub("Hong Kong", "China", country_clusters$country)
+country_clusters$country <- gsub("Czech Republic (Czechia)", "Czech Republic", country_clusters$country)
+country_clusters$country <- gsub("Côte d'Ivoire", "Ivory Coast", country_clusters$country)
+country_clusters$country <- gsub("DR Congo", "Democratic Republic of the Congo", country_clusters$country)
+country_clusters$country <- gsub("Trinidad and Tobago", "Trinidad", country_clusters$country)
+country_clusters$country <- gsub("Trinidad and Tobago", "Tobago", country_clusters$country)
+#country_clusters$country <- gsub("Macao", "China", country_clusters$country)
+country_clusters$country <- gsub("State of Palestine", "Palestine", country_clusters$country)
+country_clusters$country <- gsub("Congo", "Republic of Congo", country_clusters$country)
+country_clusters$country <- gsub("Eswatini", "Swaziland", country_clusters$country)
+country_clusters$country <- gsub("Cabo Verde", "Cape Verde", country_clusters$country)
+country_clusters$country <- gsub("Antigua and Barbuda", "Antigua", country_clusters$country)
+country_clusters$country <- gsub("Antigua and Barbuda", "Barbuda", country_clusters$country)
+country_clusters$country <- gsub("Saint Kitts & Nevis", "Saint Kitts", country_clusters$country)
+country_clusters$country <- gsub("Saint Kitts & Nevis", "Nevis", country_clusters$country)
+country_clusters$country <- gsub("St. Vincent & Grenadines", "Saint Vincent", country_clusters$country)
+country_clusters$country <- gsub("Sao Tome & Principe", "Sao Tome and Principe", country_clusters$country)
+
+world_map <- map_data("world")
+
+world_map_clusters <- merge(world_map, country_clusters, by.x = "region", by.y = "country", all.x = TRUE)
+
+ggplot(data = world_map_clusters) +
+  geom_polygon(aes(x = long, y = lat, group = group, fill = factor(cluster))) +
+  expand_limits(x = world_map$long, y = world_map$lat) +
+  theme_minimal() +
+  labs(fill = "Cluster")
+```
+
+## model-based clustering
+
+```{r}
+## model-based clustering
+library(mclust)
+mc <- Mclust(s.statistics)
+summary(mc)
+```
+Based on the results, there are 3 clusters.
+
+
+```{r}
+# find the number of cluster
+plot(mc, what='BIC')
+```
+```{r}
+summary(mc$BIC)
+```
+Based on the result, we can confirm that the number of clusters is 3.
+```{r}
+# clusterMeans-ModelBased
+clusterMeans <- mc$parameters$mean
+clusterMeans <- t(clusterMeans)
+rownames(clusterMeans) <- c("Cluster 1", "Cluster 2", "Cluster 3")
+library(knitr)
+kable(clusterMeans, caption = "Column Means for each Cluster - ModelBased")
+```
+
+
+```{r}
+# Interpreting ModelBased Clusters based on PCA
+plot(pca$scores[, 1:2], col = 'white', main='PCA Biplot - ModelBased Clustering')
+text(pca$scores[, 1:2], labels=row.names(s.statistics), col=mc$classification, cex=0.5)
+```
+```{r}
+statistics_2 <- as.data.frame(s.statistics)
+statistics_2$Cluster <- mc$classification
+cluster1_data <- statistics_2[statistics_2$Cluster == 1, ]
+cluster1_data
+cluster2_data <- statistics_2[statistics_2$Cluster == 2, ]
+cluster2_data
+cluster3_data <- statistics_2[statistics_2$Cluster == 3, ]
+cluster3_data
+```
+
+```{r}
+clust.data = cbind(rownames(mydata), mc$classification,mc$uncertainty)
+sorted_uncertainty <- clust.data[order(-mc$uncertainty),]
+head(sorted_uncertainty, 10)
+```
+
+
+
+```{r}
+# make a map
+country_clusters <- data.frame(country = names(mc$classification), cluster = mc$classification)
+country_clusters$country <- gsub("United States", "USA", country_clusters$country)
+country_clusters$country <- gsub("United Kingdom", "UK", country_clusters$country)
+#country_clusters$country <- gsub("Hong Kong", "China", country_clusters$country)
+country_clusters$country <- gsub("Czech Republic (Czechia)", "Czech Republic", country_clusters$country)
+country_clusters$country <- gsub("Côte d'Ivoire", "Ivory Coast", country_clusters$country)
+country_clusters$country <- gsub("DR Congo", "Democratic Republic of the Congo", country_clusters$country)
+country_clusters$country <- gsub("Trinidad and Tobago", "Trinidad", country_clusters$country)
+country_clusters$country <- gsub("Trinidad and Tobago", "Tobago", country_clusters$country)
+#country_clusters$country <- gsub("Macao", "China", country_clusters$country)
+country_clusters$country <- gsub("State of Palestine", "Palestine", country_clusters$country)
+country_clusters$country <- gsub("Congo", "Republic of Congo", country_clusters$country)
+country_clusters$country <- gsub("Eswatini", "Swaziland", country_clusters$country)
+country_clusters$country <- gsub("Cabo Verde", "Cape Verde", country_clusters$country)
+country_clusters$country <- gsub("Antigua and Barbuda", "Antigua", country_clusters$country)
+country_clusters$country <- gsub("Antigua and Barbuda", "Barbuda", country_clusters$country)
+country_clusters$country <- gsub("Saint Kitts & Nevis", "Saint Kitts", country_clusters$country)
+country_clusters$country <- gsub("Saint Kitts & Nevis", "Nevis", country_clusters$country)
+country_clusters$country <- gsub("St. Vincent & Grenadines", "Saint Vincent", country_clusters$country)
+country_clusters$country <- gsub("Sao Tome & Principe", "Sao Tome and Principe", country_clusters$country)
+
+world_map <- map_data("world")
+
+world_map_clusters <- merge(world_map, country_clusters, by.x = "region", by.y = "country", all.x = TRUE)
+
+ggplot(data = world_map_clusters) +
+  geom_polygon(aes(x = long, y = lat, group = group, fill = factor(cluster))) +
+  expand_limits(x = world_map$long, y = world_map$lat) +
+  theme_minimal() +
+  labs(fill = "Cluster")
+```
+
+
+Since we choose different number of clusters for each method, it is not very meaningful to use X-squared to decide which model is better.
+When comparing clusterings with different numbers of clusters, the results of the Chi-Squared test should be interpreted with caution.In such cases, it might be more effective to use metrics specifically designed for clustering analysis, like the Silhouette Coefficient or the Calinski-Harabasz Index.
+
+```{r}
+## Silhouette Coefficient
+library(cluster)
+# HC.single
+silhouettescores.single <- silhouette(ct, dist(s.statistics))
+plot(silhouettescores.single, main = "silhouette scores of HC.single")
+# HC.complete
+silhouettescores.complete <- silhouette(ct2, dist(s.statistics))
+plot(silhouettescores.complete, main = "silhouette scores of HC.complete")
+# HC.average
+silhouettescores.average <- silhouette(ct3, dist(s.statistics))
+plot(silhouettescores.average, main = "silhouette scores of HC.average")
+```
+```{r}
+options(digits = 3)
+# kmeans
+silhouettescores.kmeans <- silhouette(km$cluster, dist(s.statistics))
+summary(silhouettescores.kmeans)
+plot(silhouettescores.kmeans, main = "silhouette scores of kmeans clustering")
+```
+```{r}
+# Model Based
+silhouettescores.mc <- silhouette(mc$classification, dist(s.statistics))
+summary(silhouettescores.mc)
+plot(silhouettescores.mc, main = "silhouette scores of Model Based clustering")
+```
+
+
+Values range from -1 to 1. A high value indicates that the object is well matched to its own cluster and poorly matched to neighboring clusters.
+
+
+

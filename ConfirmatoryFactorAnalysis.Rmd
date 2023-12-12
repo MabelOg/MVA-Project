@@ -1,0 +1,321 @@
+---
+title: "Confirmatory Factor Analysis"
+output: html_document
+date: "2023-11-22"
+---
+
+```{r}
+statistics <- read.csv("C:/Users/leela/OneDrive/Documents/MVA/Project/Full_Dataset.csv")
+head(statistics)
+```
+
+
+
+```{r}
+# Install and load the countrycode package
+if (!requireNamespace("countrycode", quietly = TRUE)) {
+  install.packages("countrycode")
+}
+
+# Load the countrycode package
+library(countrycode)
+
+# Assuming your data frame is named 'statistics', and the country column is named 'Country'
+statistics$Continent <- countrycode(sourcevar = statistics$Country,
+                                    origin = "country.name",
+                                    destination = "continent")
+
+
+# Place Continent after Country colum
+statistics <- statistics[, c("Country", "Continent", names(statistics)[-c(which(names(statistics) %in% c("Country", "Continent")))])]
+
+# Display the updated data frame
+head(statistics)
+```
+
+```{r}
+#The function grouped all North and South American countries as Americas 
+# Also, the function could not identify the Continent for Micronesia, therefore we manually hard-coded these cases.
+
+# Manually override the continent for specific cases
+statistics$Continent[statistics$Country == "Micronesia"] <- "Oceania"
+statistics$Continent[statistics$Country %in% c("United States", "Canada", "Mexico")] <- "North America"
+statistics$Continent[statistics$Country %in% c("Brazil", "Argentina", "Colombia", "Chile", "Peru", "Ecuador", "Bolivia", "Paraguay", "Trinidad and Tobago", 
+                                               "Uruguay", "Venezuela", "Guyana", "Suriname", "French Guiana")] <- "South America"
+statistics$Continent[statistics$Country %in% c("Guatemala", "Panama", "Costa Rica", "El Salvador", "Honduras", "Nicaragua", "Belize")] <- "Central America"
+statistics$Continent[statistics$Country %in% c("Dominica", "Saint Kitts & Nevis", "St. Vincent & Grenadines", "Trinidad and Tobago", "Haiti", 
+                                               "Bahamas", "Barbados", "Saint Lucia", "Antigua and Barbuda", "Grenada")] <- "Caribbean"
+```
+
+
+```{r}
+#View(statistics)
+```
+
+
+
+```{r}
+str(statistics)
+```
+
+
+
+```{r}
+# Custom function to convert Export and Import values with trillion, billion, million to numeric
+convert_to_numeric <- function(value) {
+  # Extract numeric part
+  numeric_part <- as.numeric(gsub("[^0-9.]", "", value))
+
+  # Extract unit part
+  unit_part <- gsub("[0-9.]", "", value)
+
+  # Convert to numeric based on unit
+  if (grepl("trillion", unit_part, ignore.case = TRUE)) {
+    return(numeric_part * 1e12)
+  } else if (grepl("billion", unit_part, ignore.case = TRUE)) {
+    return(numeric_part * 1e9)
+  } else if (grepl("million", unit_part, ignore.case = TRUE)) {
+    return(numeric_part * 1e6)
+  } else {
+    return(numeric_part)
+  }
+}
+
+# Apply custom function to "Exports" and "Imports" columns
+statistics$Exports <- sapply(statistics$Exports, convert_to_numeric)
+statistics$Imports <- sapply(statistics$Imports, convert_to_numeric)
+
+# Display the updated structure
+str(statistics)
+```
+
+
+
+# Handling Missing Values
+
+```{r}
+
+# Load the necessary package
+library(dplyr)
+
+# Function to replace missing values with the median of the continent
+replace_na_with_median <- function(df, col_name) {
+  df %>%
+    group_by({{ col_name }}) %>%
+    mutate(across(where(is.numeric), ~ ifelse(is.na(.), median(., na.rm = TRUE), .))) %>%
+    ungroup()
+}
+
+# Replace missing values in numeric columns with the median of the continent
+statistics <- replace_na_with_median(statistics, col_name = Continent)
+
+statistics <- as.data.frame(statistics)
+
+# Display the updated data frame
+head(statistics)
+```
+
+
+```{r}
+# Set row names to "Country" column
+row.names(statistics) <- statistics$Country
+
+# Removing categorical columns
+statistics <- statistics[, c(-1, -2, -20, -23, -25)] 
+
+# Display the updated data frame
+head(statistics)
+```
+
+```{r}
+# reversing the values of some variables.
+statistics$UnEmpRate = max(statistics$UnEmpRate) - statistics$UnEmpRate
+statistics$IMR = max(statistics$IMR) - statistics$IMR
+statistics$InfRate = max(statistics$InfRate) - statistics$InfRate
+statistics$CO2 = max(statistics$CO2) - statistics$CO2
+statistics$AQI = max(statistics$AQI) - statistics$AQI
+head(statistics)
+```
+
+
+
+```{r}
+#Scale data
+statistics.s= scale(statistics)
+```
+
+
+```{r}
+statistics.corr = cor(statistics.s)
+round(statistics.corr, 2)
+
+newdata <- statistics.s[, c("LE_Male", "LE_Female", "IMR","LitRate", "AQI", "WQI")]
+newdata.cor <- cor(newdata)
+
+newdata.fa <- factanal(covmat = newdata.cor , factors = 2 , n.obs = 177)
+print(newdata.fa$loadings, cut = 0.4)
+round(newdata.fa$uniquenesses,2)
+
+```
+```{r}
+statistics.fa <- factanal(covmat = statistics.corr , n.obs = 177, factors = 3 , rotation = "varimax")
+statistics.fa
+print(statistics.fa$loadings, cut = 0.1)
+```
+
+```{r}
+statistics.fa <- factanal(covmat = statistics.corr , n.obs = 177, factors = 3 )
+print(statistics.fa$loadings, cut = 0.4)
+```
+```{r}
+ # preparing data for CFA model excluding variables with loadings less than 0.4 and negative correlations.
+data <- statistics.s[, c("Population", "LE_Male", "LE_Female", "IMR", "LitRate", "GDP", "PerCap", "Exports", "Imports", "Ecn_Serv", "AQI", "WQI")]
+
+data.cor <- cor(data)
+round(data.cor,2)
+```
+```{r}
+d.fa <- factanal(covmat = data.cor , n.obs = 177, factors = 2 )
+round(d.fa$uniquenesses,2)
+print(d.fa$loadings, cut = 0.5)
+
+```
+```{r}
+ # preparing data for CFA model excluding variables with loadings less than 0.4 and negative correlations.
+data4 <- statistics.s[, c("Population", "LE_Male", "IMR", "LitRate", "GDP","Imports", "PerCap", "Ecn_Serv", "AQI", "WQI")]
+data4.cor <- cor(data4)
+d4.fa <- factanal(covmat = data4.cor , n.obs = 177, factors = 3 )
+print(d4.fa$loadings, cut = 0.5)
+round(d4.fa$uniquenesses,2)
+
+```
+```{r}
+data007 <- statistics.s[, c("GDP", "Imports", "Population", "LE_Male", "IMR", "LitRate")]
+data007.cor <- cor(data007)
+data007.cor
+
+data007.fa <- factanal(covmat = data007.cor, n.obs = 177, factors = 2)
+print(data007.fa$loadings, cut = 0.5)
+round(data007.fa$uniquenesses,2)
+```
+```{r}
+options(digits = 2)
+data007.cfa <- specifyModel(text ="
+Health -> LE_Male , 0.891, NA
+Health -> IMR, 0.974, NA
+Health -> LitRate, 0.815, NA
+Economy -> GDP , 0.971, NA
+Economy -> Imports, 0.949, NA
+Economy -> Population , 0.602, NA
+Health <-> Economy, rho , NA
+LE_Male <-> LE_Male , 0.20, NA
+IMR <-> IMR, 0.05, NA
+LitRate <-> LitRate, 0.33, NA
+GDP <-> GDP , 0.05, NA
+Imports <-> Imports, 0.06, NA
+Population <-> Population, 0.64, NA
+Health <-> Health , NA, 1 
+Economy <-> Economy , NA, 1")
+data007.sem <- sem (data007.cfa, data007.cor, 177)
+summary(data007.sem)
+```
+```{r}
+# confidence interval 
+ CI_Upper <- 0.189 + (1.96*0.075)
+CI_Upper
+ CI_Lower <- 0.189 - (1.96*0.075)
+cat("[", CI_Lower , "," , CI_Upper, "] ")
+```
+```{r}
+# Estimation of the correlation  matrix
+# restricted Cor matrix
+round(data007.sem$C,2)
+```
+```{r}
+# Estimation of the correlation  matrix
+# non - restricted Cor matrix
+round(data007.sem$S,2)
+```
+```{r}
+# root mean square error
+rmse <- sqrt(mean((data007.sem$C - data007.sem$S)^2))
+rmse
+
+rmse < 0.1
+```
+```{r}
+options(fit.indices = c("GFI", "AGFI", "SRMR"))
+summary(data.sem)
+```
+```{r}
+# path diagram 
+library(semPlot)
+semPaths(data007.sem, rotation = 2, "est")
+```
+```{r}
+data008 <- statistics.s[, c("GDP", "Exports", "Population", "LE_Female", "IMR", "LitRate")]
+data008.cor <- cor(data008)
+data008.cor
+
+data008.fa <- factanal(covmat = data008.cor, n.obs = 177, factors = 2)
+print(data008.fa$loadings, cut = 0.5)
+round(data008.fa$uniquenesses,2)
+```
+
+
+```{r}
+library(sem)
+options(digits = 2)
+data008.cfa <- specifyModel(text ="
+Health -> LE_Female , 0.942, NA
+Health -> IMR, 0.975, NA
+Health -> LitRate, 0.814, NA
+Economy -> GDP , 0.914 NA
+Economy -> Exports, 0.977, NA
+Economy -> Population , 0.642, NA
+Health <-> Economy, rho , NA
+LE_Female <-> LE_Female , 0.11, NA
+IMR <-> IMR, 0.05, NA
+LitRate <-> LitRate, 0.34, NA
+GDP <-> GDP , 0.16, NA
+Exports <-> Exports, 0.00, NA
+Population <-> Population, 0.59, NA
+Health <-> Health , NA, 1 
+Economy <-> Economy , NA, 1")
+data008.sem <- sem (data008.cfa, data008.cor, 177)
+summary(data008.sem)
+```
+
+```{r}
+# confidence interval 
+ CI_Upper <- 0.268 + (1.96*0.070)
+ CI_Lower <- 0.268 - (1.96*0.070)
+cat("[", CI_Lower , "," , CI_Upper, "] ")
+```
+```{r}
+# Estimation of the correlation  matrix
+# restricted Cor matrix
+round(data008.sem$C,2)
+```
+```{r}
+# Estimation of the correlation  matrix
+# non - restricted Cor matrix
+round(data008.sem$S,2)
+```
+```{r}
+# root mean square error
+rmse <- sqrt(mean((data008.sem$C - data008.sem$S)^2))
+rmse
+
+rmse < 0.1
+```
+```{r}
+options(fit.indices = c("GFI", "AGFI", "SRMR"))
+summary(data008.sem)
+```
+```{r}
+# path diagram 
+library(semPlot)
+semPaths(data008.sem, rotation = 2, "est")
+```
+
